@@ -23,11 +23,11 @@ def main():
 
     if args.l:
         generate_compute_workflow()
-    if args.f:
-        woid_list()
-        samples = sample_email(working_dir + '/' + args.f)
-        # print(samples)
-        # sample_launch(args.f, samples)
+
+    if os.path.exists(args.f):
+        woid_dirs = woid_list()
+        print(woid_dirs)
+        ccdg_launcher(working_dir + '/' + args.f)
 
 
 def generate_compute_workflow():
@@ -61,11 +61,14 @@ def woid_list():
 
     for woid in filter(is_int, woid_dir_unfiltered):
         woid_dirs.append(woid)
-    print(woid_dirs)
 
     return woid_dirs
 
+#create computeworkflow file in woid directory
 def compute_workflow_create(compute_workflow_all_file, woid):
+    if not os.path.exists(working_dir + '/' + woid):
+        os.chdir(woid)
+
     outfile = woid + '.compute.workflow.' + mm_dd_yy + '.tsv'
     with open(compute_workflow_all_file, 'r') as compute_workflow_all_csv, open(outfile, 'w') as outfilecsv:
 
@@ -74,17 +77,133 @@ def compute_workflow_create(compute_workflow_all_file, woid):
 
         outfile_writer = csv.DictWriter(outfilecsv, fieldnames=cwl_fieldnames, delimiter='\t')
         outfile_writer.writeheader()
+
         for line in cwl_reader:
             if woid in line['Work Order']:
                 outfile_writer.writerow(line)
+    return outfile
+
+#ccdg status fuction, update samples status in status file using launch emails and input file
+#open input file and add it to dict with sample as key
+#open email file, if sample name found in input file then check launch values if equal assign launch
+#satus, if not equal assign failed status, store in fail file.
+qc_fieldnames = ['QC Sample', 'WOID', 'PSE', 'Instrument Check', 'LIMS Status', 'Launch Status', 'Launch Date', '# of Inputs',
+             '# of Instrument Data', 'QC Status', 'QC Date', 'QC Failed Metrics', 'COD Collaborator', 'QC Directory', 'Top Up']
+
+def sample_pse_match(infile, sample, woid):
+    qc_results = {}
+    with open(infile) as infiletsv:
+        infile_reader = csv.DictReader(infiletsv, delimiter='\t')
+        for qc_data in infile_reader:
+            if sample in qc_data['Sample Full Name']:
+                print('Sample: {} found to qc'.format(sample))
+                if sample == qc_data['Sample Full Name']:
+                    qc_results['QC Sample'] = qc_data['Sample Full Name']
+                    qc_results['PSE'] = qc_data['PSE']
+                    qc_results['# of Inputs'] = qc_data['# of Inputs']
+                    qc_results['# of Instrument Data'] = qc_data['# of Instrument Data']
+                    qc_results['Launch Date'] = mm_dd_yy
+                    qc_results['WOID'] = woid
+                    qc_results['QC Status'] = 'NONE'
+                    qc_results['QC Date'] = 'NONE'
+                    qc_results['QC Failed Metrics'] = 'NONE'
+                    qc_results['COD Collaborator'] = 'NONE'
+                    qc_results['QC Directory'] = 'NONE'
+                    qc_results['LIMS Status'] = qc_data['Status']
+                    qc_results['Top Up'] = 'NONE'
+
+                    if int(qc_data['# of Inputs']) == int(qc_data['# of Instrument Data']):
+                        qc_results['Instrument Check'] = 'PASS'
+                        qc_results['Launch Status'] = 'Launched'
+                    else:
+                        qc_results['Instrument Check'] = 'FAIL'
+                        qc_results['Launch Status'] = 'DO NOT LAUNCH'
+                        qc_results['Launch Date'] = 'NA'
+
+    return qc_results
+
+qc_master_sample_list = []
+def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
+
+    temp_status_file = woid + '.qcstatus.temp.tsv'
+    launch_failed_temp = woid + '.launch.fail.temp.tsv'
+    launch_failed_file = woid + '.launch.fail.tsv'
+
+    with open(qc_status_file,'r') as qcstatuscsv, open(temp_status_file,'w') as tempstatuscsv, \
+            open(launch_failed_temp,'w') as launchtempcsv:
+
+        status_file_reader = csv.DictReader(qcstatuscsv, delimiter='\t')
+        status_file_header = status_file_reader.fieldnames
+
+        temp_status_writer = csv.DictWriter(tempstatuscsv, fieldnames=status_file_header, delimiter='\t')
+        temp_status_writer.writeheader()
+
+        temp_launch_fail_writer = csv.DictWriter(launchtempcsv, fieldnames=status_file_header, delimiter='\t')
+        temp_launch_fail_writer.writeheader()
+
+
+        pse_ready = []
+        pse_fail = []
+        pse_fail_ready = []
+        pse_fail_fail = []
+
+        for line in status_file_reader:
+            qc_master_sample_list.append(line['Full Name'])
+
+            #check samples that have already failed
+            if line['Instrument Check'] == 'Fail':
+                fail_metrics = sample_pse_match(compute_workflow, line['Full Name'], woid)
+                fail_qc_update = dict(list(line.items())+list(fail_metrics.items()))
+
+                #write passed samples to temp file, populate ready list
+                if fail_metrics['Instrument Check'] == 'PASS':
+                    temp_status_writer.writerow(fail_qc_update)
+                    pse_fail_ready.append(fail_metrics['PSE'])
+
+                #write failed samples to temp file, populate not ready list
+                if fail_metrics['Instrument Check'] == 'FAIL':
+                    temp_status_writer.writerow(fail_qc_update)
+                    pse_fail_fail.append(fail_metrics['QC Sample'] + "\t" + fail_metrics['PSE'] + "\t" +
+                                         fail_metrics['# of Inputs'] + "\t" + fail_metrics['# of Instrument Data'])
+
+            #check sample status from sample email sent to be qc'd
+            elif (line['Full Name'] in sample_list) and not line['QC Sample']:
+                sample = line['Full Name']
+                qc_metrics = sample_pse_match(compute_workflow, sample, woid)
+                master_qc_update = dict(list(line.items())+list(qc_metrics.items()))
+
+                #write passed samples to temp file
+                if qc_metrics['Instrument Check'] == 'PASS':
+                    temp_status_writer.writerow(master_qc_update)
+                    pse_ready.append(qc_metrics['PSE'])
+
+                #write failed samples to temp file
+                if qc_metrics['Instrument Check'] == 'FAIL':
+                    temp_status_writer.writerow(master_qc_update)
+                    temp_launch_fail_writer.writerow(master_qc_update)
+                    pse_fail.append(qc_metrics['QC Sample'] + "\t" + qc_metrics['PSE'] + "\t" + qc_metrics['# of Inputs']
+                                    + "\t" + qc_metrics['# of Instrument Data'])
+
+            #skip samples already checked to launch
+            else:
+                if line['Full Name'] in sample_list:
+                    print('Ignoring previously analyzed sample: {}\t{}\t{}'
+                          .format(line['Full Name'], line['Launch Date'], line['Launch Status']))
+                temp_status_writer.writerow(line)
+
+        for samp in sample_list:
+            if not samp in qc_master_sample_list:
+                print('{} not found in {}'.format(samp, qc_status_file))
+
+    os.rename(temp_status_file, qc_status_file)
+    os.rename(launch_failed_temp, launch_failed_file)
+
+            #TODO print results on terminal
     return
-
-
-
 
 #sample email function, create new woid dir if it doesn't exist and master spreadsheet if it doesn't exist.
 #write emails to email file
-def sample_email(infile):
+def ccdg_launcher(infile):
 
     sample_list = []
 
@@ -92,13 +211,17 @@ def sample_email(infile):
         woid = input('----------\nWork order id (enter to exit):\n').strip()
         # if not woid:
         if (len(woid) == 0):
-            print('Exiting sample email creation')
+            print('Exiting ccdg launcher.')
             break
         try:
             val = int(woid)
         except ValueError:
             print("\nwoid must be a number.")
             continue
+
+        master_outfile = woid + '.master.samples.tsv'
+        qc_status_file = woid + '.qcstatus.tsv'
+        launch_failed_file = woid + '.launch.fail.tsv'
 
         #create woid dir if it does not exist
         if not os.path.exists(woid):
@@ -107,7 +230,7 @@ def sample_email(infile):
             if create_woid == 'y':
                 os.makedirs(woid)
                 os.chdir(woid)
-                #create master file if it does not exist
+                #create master file if it does not exist and also qcstatus file
                 create_master = input('\nCreate {}.master.samples.tsv file? (y or n)\n'.format(woid))
                 if create_master == 'y':
                     master_sample_link = 'https://imp-lims.gsc.wustl.edu/entity/setup-work-order/' + woid + \
@@ -120,13 +243,31 @@ def sample_email(infile):
                             master_samples.append(master_sample_line)
                         else:
                             break
-                    master_outfile = woid + '.master.samples.tsv'
-                    qc_tracking_file = woid + '.qcstatus.tsv'
-                    with open(master_outfile, 'w') as mastercsv, open(qc_tracking_file, 'w') as statuscsv:
+
+                    with open(master_outfile, 'w') as mastercsv, open(qc_status_file, 'w') as statuscsv:
                         master_write = csv.writer(mastercsv, delimiter='\n')
                         status_write = csv.writer(statuscsv, delimiter='\n')
                         master_write.writerows([master_samples])
                         status_write.writerows([master_samples])
+
+                    #Add header to qc status file and create failed to launch file with the same header.
+                    with open(qc_status_file, 'r') as qcstempcsv, open('qc.status.temp.tsv', 'w') as qcstatusfilecsv, \
+                            open(launch_failed_file, 'w') as launchfailedcsv:
+                        temp_reader = csv.DictReader(qcstempcsv, delimiter = '\t')
+
+                        temp_header = temp_reader.fieldnames
+                        status_header = temp_header + qc_fieldnames
+
+                        status_writer = csv.DictWriter(qcstatusfilecsv, fieldnames=status_header, delimiter='\t')
+                        launch_fail_writer = csv.DictWriter(launchfailedcsv, fieldnames=status_header, delimiter='\t')
+                        status_writer.writeheader()
+                        launch_fail_writer.writeheader()
+
+                        for line in temp_reader:
+                            status_writer.writerow(line)
+
+                        os.rename('qc.status.temp.tsv', qc_status_file)
+
                 os.chdir(working_dir)
 
                 if create_master == 'n':
@@ -134,12 +275,13 @@ def sample_email(infile):
             if create_woid == 'n':
                 continue
 
+        #create sample email
         sample_number = input('\nSample number:\n')
         try:
             val = int(sample_number)
         except ValueError:
             print('Sample number must be a number.')
-            exit()
+            quit()
 
         date = input('\nUse today\'s date? (y or n)\n')
         if date == 'y':
@@ -173,6 +315,7 @@ def sample_email(infile):
             sample_write = csv.writer(sample_outfilecsv, delimiter='\n')
             sample_write.writerows([sample_info])
 
+        #from sample file, use Library field to create sample list (modified to match lims samples)
         with open(sample_outfile, 'r') as samplecsv:
 
             sample_reader = csv.DictReader(samplecsv, delimiter='\t')
@@ -180,30 +323,17 @@ def sample_email(infile):
             for sample_line in sample_reader:
                 sample_remove_whitespace = {k.replace(' ', ''): v for k, v in sample_line.items()}
                 sample_name = sample_remove_whitespace['Library']
-                sample_name_split = sample_name.split('-')[0]
+                sample_name_split = sample_name.split('-lib')[0]
                 sample = sample_name_split.strip()
                 sample_list.append(sample)
 
-        compute_workflow_create(infile, woid)
-        quit()
+        #create compute workflow file
+        woid_cw_file = compute_workflow_create(infile, woid)
 
-    return sample_list
-
-
-#ccdg status fuction, update samples status in status file using launch emails and input file
-#open input file and add it to dict with sample as key
-#open email file, if sample name found in input file then check launch values if equal assign launch
-#satus, if not equal assign failed status, store in fail file.
-qc_fieldnames = ['QC Sample', 'WOID', 'PSE', 'Instrument Check', 'Launch Status', 'Launch Date', '# of Inputs',
-             '# of Instrument Data', 'QC Status', 'QC Date', 'QC Failed Metrics', 'COD Collaborator', 'QC Directory']
-
-def sample_launch(infile, sample_list):
-    infile_sample_dict = {}
-    with open(infile) as infiletsv:
-        infile_reader = csv.DictReader(infiletsv, delimiter='\t')
-        outfile_header = infile_reader.fieldnames + qc_fieldnames
-        for line in infile_reader:
-            print(line)
+        if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(launch_failed_file):
+            qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
+            
+    return
 
 
 if __name__ == '__main__':
