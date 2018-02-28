@@ -48,8 +48,6 @@ def generate_compute_workflow():
     print('\nCompute workflow link:\n{}'.format(launch_link))
     print('\nCreate workflow file:\ncat > ccdg.computeworkflow.{}.tsv\n'.format(mm_dd_yy))
 
-
-#set dir to ccdg woid dir
 #make list of all woid dirs, filter out anything that isn't a woid
 def woid_list():
     woid_dirs = []
@@ -87,14 +85,12 @@ def compute_workflow_create(compute_workflow_all_file, woid):
                 outfile_writer.writerow(line)
     return outfile
 
-#ccdg status fuction, update samples status in status file using launch emails and input file
-#open input file and add it to dict with sample as key
-#open email file, if sample name found in input file then check launch values if equal assign launch
-#satus, if not equal assign failed status, store in fail file.
+
 qc_fieldnames = ['WOID','QC Sample','PSE','# of Inputs','# of Instrument Data','LIMS Status','Instrument Check',
                  'Launch Status','Launch Date','QC Status','QC Date','QC Failed Metrics','COD Collaborator',
                  'QC Directory','Top Up']
 
+#assing qc fields, check instrument match and sample lims status
 def sample_pse_match(infile, sample, woid):
     qc_results = {}
     with open(infile) as infiletsv:
@@ -133,8 +129,44 @@ def sample_pse_match(infile, sample, woid):
 
     return qc_results
 
-qc_master_sample_list = []
+#print sample status results
+def output_launcher_results(pse_ready, pse_fail, pse_fail_ready, pse_fail_fail, ins_pass_stat_actv):
 
+    if len(pse_ready) > 0:
+        print('\n{} Samples pass instrument check, status updated to Launched:'.format(str(len(pse_ready))))
+        print('Sample', 'PSE', sep='\t')
+        for pse in pse_ready:
+            print(pse)
+
+    if len(pse_fail) > 0:
+        print('\n{} Samples failed instrument check, status is do not launch: '.format(str(len(pse_fail))))
+        print('Sample', 'PSE', '# of Inputs', '# of Instrument Data', sep="\t")
+        for pse in pse_fail:
+            print(pse)
+
+    if len(pse_fail_ready) > 0:
+        print('\n{} Failed samples, pass instrument check, status updated to Launched:'.format(str(len(pse_fail_ready))))
+        print('Sample', 'PSE', sep='\t')
+        for pse in pse_fail_ready:
+            print(pse)
+
+    if len(pse_fail_fail) > 0:
+        print('\n{} Samples failed instrument check again, status is do not launch:'.format(str(len(pse_fail_fail))))
+        for pse in pse_fail_fail:
+            print(pse)
+
+    if len(ins_pass_stat_actv) > 0:
+        print('{} Samples pass instrument check, protocol status is active, :'.format(str(len(ins_pass_stat_actv))))
+        print('Sample', 'PSE', '# of Inputs', '# of Instrument Data', 'LIMS Status', sep="\t")
+        for pse in ins_pass_stat_actv:
+            print(pse)
+        print('Manually launch samples if they have not already been launched (check jira).')
+
+    else:
+        print('\nAll processed samples have a launch status.\n')
+
+#process samples update qc files and populate results lists for printing
+qc_master_sample_list = []
 def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
 
     temp_status_file = woid + '.qcstatus.temp.tsv'
@@ -177,7 +209,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                 #write passed samples to temp file, populate ready list
                 if fail_metrics['Instrument Check'] == 'PASS' and fail_metrics['Launch Status'] == 'Launched':
                     temp_status_writer.writerow(fail_qc_update)
-                    pse_fail_ready.append(fail_metrics['PSE'])
+                    pse_fail_ready.append(fail_metrics['QC Sample'] + '\t' + fail_metrics['PSE'])
 
                 #write failed samples to temp file, populate not ready list
                 if fail_metrics['Instrument Check'] == 'FAIL':
@@ -202,7 +234,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                 #write passed samples to temp file
                 if qc_metrics['Instrument Check'] == 'PASS' and qc_metrics['Launch Status'] == 'Launched':
                     temp_status_writer.writerow(master_qc_update)
-                    pse_ready.append(qc_metrics['PSE'])
+                    pse_ready.append(qc_metrics['QC Sample'] + '\t' + qc_metrics['PSE'])
 
                 #write failed samples to temp file
                 if qc_metrics['Instrument Check'] == 'FAIL':
@@ -227,6 +259,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                 #write all other unchecked samples to file
                 temp_status_writer.writerow(line)
 
+        #check to see if sample exists in status file
         for samp in sample_list:
             if not samp in qc_master_sample_list:
                 print('{} not found in {}'.format(samp, qc_status_file))
@@ -235,7 +268,8 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
     os.rename(launch_failed_temp, launch_failed_file)
     os.rename(instrument_pass_status_active_file_tmp, instrument_pass_status_active_file)
 
-            #TODO print results on terminal
+    output_launcher_results(pse_ready, pse_fail, pse_fail_ready, pse_fail_fail, ins_pass_stat_actv)
+
     return
 
 #sample email function, create new woid dir if it doesn't exist and master spreadsheet if it doesn't exist.
@@ -369,10 +403,10 @@ def ccdg_launcher(infile):
 
         if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(launch_failed_file):
             qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
+
         os.chdir(working_dir)
 
     return
-
 
 if __name__ == '__main__':
     main()
