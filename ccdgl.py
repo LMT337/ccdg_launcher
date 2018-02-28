@@ -23,6 +23,7 @@ def main():
 
     if args.l:
         generate_compute_workflow()
+        quit()
 
     if not os.path.exists(args.f):
         print('{} file not found.'.format(args.f))
@@ -133,15 +134,19 @@ def sample_pse_match(infile, sample, woid):
     return qc_results
 
 qc_master_sample_list = []
+
 def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
 
     temp_status_file = woid + '.qcstatus.temp.tsv'
+
     launch_failed_temp = woid + '.launch.fail.temp.tsv'
     launch_failed_file = woid + '.launch.fail.tsv'
+
     instrument_pass_status_active_file = woid + '.instrument.pass.status.active.tsv'
+    instrument_pass_status_active_file_tmp = woid + '.instrument.pass.status.active.temp.tsv'
 
     with open(qc_status_file,'r') as qcstatuscsv, open(temp_status_file,'w') as tempstatuscsv, \
-            open(launch_failed_temp,'w') as launchtempcsv, open(instrument_pass_status_active_file, 'w') as ipsafcsv:
+            open(launch_failed_temp,'w') as launchtempcsv, open(instrument_pass_status_active_file_tmp,'w') as ipsafcsv:
 
         status_file_reader = csv.DictReader(qcstatuscsv, delimiter='\t')
         status_file_header = status_file_reader.fieldnames
@@ -165,7 +170,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
             qc_master_sample_list.append(line['Full Name'])
 
             #check samples that have already failed
-            if line['Instrument Check'] == 'Fail':
+            if line['Instrument Check'] == 'FAIL' or line['Launch Status'] == 'MANUAL LAUNCH':
                 fail_metrics = sample_pse_match(compute_workflow, line['Full Name'], woid)
                 fail_qc_update = dict(list(line.items())+list(fail_metrics.items()))
 
@@ -182,11 +187,12 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                                          fail_metrics['# of Inputs'] + "\t" + fail_metrics['# of Instrument Data'])
 
                 if (fail_metrics['Instrument Check'] == 'PASS') and (fail_metrics['Launch Status'] == 'MANUAL LAUNCH'):
+                    print('HERE HERE HERE')
                     temp_status_writer.writerow(fail_qc_update)
-                    instrument_pass_status_active_writer(fail_qc_update)
+                    instrument_pass_status_active_writer.writerow(fail_qc_update)
                     ins_pass_stat_actv.append(fail_metrics['QC Sample'] + "\t" + fail_metrics['PSE'] + "\t" +
                                               fail_metrics['# of Inputs'] + "\t" + fail_metrics['# of Instrument Data']
-                                              + '\t' + fail_metrics['Status'])
+                                              + '\t' + fail_metrics['LIMS Status'])
 
             #check sample status from sample email sent to be qc'd
             elif (line['Full Name'] in sample_list) and not line['QC Sample']:
@@ -207,17 +213,20 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                                     + "\t" + qc_metrics['# of Instrument Data'])
 
                 if (qc_metrics['Instrument Check'] == 'PASS') and (qc_metrics['Launch Status'] == 'MANUAL LAUNCH'):
+                    print('HERE HERE HERE FIRST')
                     temp_status_writer.writerow(master_qc_update)
-                    instrument_pass_status_active_writer(master_qc_update)
+                    instrument_pass_status_active_writer.writerow(master_qc_update)
                     ins_pass_stat_actv.append(qc_metrics['QC Sample'] + "\t" + qc_metrics['PSE'] + "\t" +
                                               qc_metrics['# of Inputs'] + "\t" + qc_metrics['# of Instrument Data'] +
-                                              '\t' + qc_metrics['Status'])
+                                              '\t' + qc_metrics['LIMS Status'])
 
             #skip samples already checked to launch
             else:
                 if line['Full Name'] in sample_list:
                     print('Ignoring previously analyzed sample: {}\t{}\t{}'
                           .format(line['Full Name'], line['Launch Date'], line['Launch Status']))
+
+                #write all other unchecked samples to file
                 temp_status_writer.writerow(line)
 
         for samp in sample_list:
@@ -226,6 +235,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
 
     os.rename(temp_status_file, qc_status_file)
     os.rename(launch_failed_temp, launch_failed_file)
+    os.rename(instrument_pass_status_active_file_tmp, instrument_pass_status_active_file)
 
             #TODO print results on terminal
     return
@@ -361,6 +371,7 @@ def ccdg_launcher(infile):
 
         if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(launch_failed_file):
             qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
+        os.chdir(working_dir)
 
     return
 
