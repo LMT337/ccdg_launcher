@@ -187,7 +187,6 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                                          fail_metrics['# of Inputs'] + "\t" + fail_metrics['# of Instrument Data'])
 
                 if (fail_metrics['Instrument Check'] == 'PASS') and (fail_metrics['Launch Status'] == 'MANUAL LAUNCH'):
-                    print('HERE HERE HERE')
                     temp_status_writer.writerow(fail_qc_update)
                     instrument_pass_status_active_writer.writerow(fail_qc_update)
                     ins_pass_stat_actv.append(fail_metrics['QC Sample'] + "\t" + fail_metrics['PSE'] + "\t" +
@@ -213,7 +212,6 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                                     + "\t" + qc_metrics['# of Instrument Data'])
 
                 if (qc_metrics['Instrument Check'] == 'PASS') and (qc_metrics['Launch Status'] == 'MANUAL LAUNCH'):
-                    print('HERE HERE HERE FIRST')
                     temp_status_writer.writerow(master_qc_update)
                     instrument_pass_status_active_writer.writerow(master_qc_update)
                     ins_pass_stat_actv.append(qc_metrics['QC Sample'] + "\t" + qc_metrics['PSE'] + "\t" +
