@@ -111,7 +111,7 @@ def sample_pse_match(infile, sample, woid):
                     qc_results['COD Collaborator'] = 'NONE'
                     qc_results['QC Directory'] = 'NONE'
                     qc_results['LIMS Status'] = qc_data['Status']
-                    qc_results['Top Up'] = 'NONE'
+                    # qc_results['Top Up'] = 'NONE'
 
                     if (int(qc_data['# of Inputs']) == int(qc_data['# of Instrument Data'])) and qc_data['Status'] == \
                             'ready':
@@ -272,6 +272,26 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
 
     return
 
+def topup_csv_update(topup_samples, woid):
+
+    print(topup_samples)
+    with open(woid + '.qcstatus.tsv', 'r') as qcstatuscsv, open(woid + '.qcstatus.temp.tsv', 'w') as tempstatuscsv:
+
+        status_reader = csv.DictReader(qcstatuscsv, delimiter='\t')
+        status_fieldnames = status_reader.fieldnames
+
+        temp_status_writer = csv.DictWriter(tempstatuscsv, fieldnames=status_fieldnames, delimiter='\t')
+        temp_status_writer.writeheader()
+
+        for line in status_reader:
+            if line['Full Name'] in topup_samples:
+                line['Top Up'] = 'YES'
+            else:
+                line['Top Up'] = 'NO'
+            temp_status_writer.writerow(line)
+    os.rename(woid + '.qcstatus.temp.tsv',woid + '.qcstatus.tsv')
+    return
+
 #sample email function, create new woid dir if it doesn't exist and master spreadsheet if it doesn't exist.
 #write emails to email file
 def ccdg_launcher(infile):
@@ -346,13 +366,24 @@ def ccdg_launcher(infile):
             if create_woid == 'n':
                 continue
 
+        #check for topup samples
+        topup_samples = []
+        tu_sample_y_n = input('\nTopup samples? (y or n)\n')
+        if tu_sample_y_n == 'y':
+            while True:
+                tu_sample = input('Sample name: (enter to continue)\n' ).strip()
+                if tu_sample:
+                    topup_samples.append(tu_sample)
+                else:
+                    break
+        print(topup_samples)
+
         #create sample email
         sample_number = input('\nSample number:\n')
         try:
             val = int(sample_number)
         except ValueError:
             print('Sample number must be a number.')
-            quit()
 
         date = input('\nUse today\'s date? (y or n)\n')
         if date == 'y':
@@ -380,6 +411,9 @@ def ccdg_launcher(infile):
                 break
 
         os.chdir(woid)
+
+        topup_csv_update(topup_samples, woid)
+        quit()
 
         #write samples to email file
         with open(sample_outfile, 'w') as sample_outfilecsv:
