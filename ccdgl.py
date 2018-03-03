@@ -90,10 +90,10 @@ def compute_workflow_create(compute_workflow_all_file, woid):
     return outfile
 
 #Check compute workflow file to see if all samples are there
+sample_not_found = []
 def cw_sample_check(infile, sample):
 
     cw_samples = []
-    sample_not_found = []
 
     with open(infile) as infiletsv:
         infile_reader = csv.DictReader(infiletsv, delimiter='\t')
@@ -102,7 +102,6 @@ def cw_sample_check(infile, sample):
 
     if sample not in cw_samples:
         sample_not_found.append(sample)
-
     return sample_not_found
 
 #assing qc fields, check instrument match and sample lims status
@@ -406,7 +405,6 @@ def ccdg_launcher(infile):
             else:
                 break
 
-
         user_date = input('\nUse today\'s date? (y or n)\n')
         if user_date == 'y':
             sample_outfile = sample_number + 'samples.' + mm_dd_yy
@@ -469,6 +467,7 @@ def ccdg_launcher(infile):
                 print(sample)
             quit()
 
+        #run qc status updates on samples
         if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(launch_failed_file):
             qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
 
