@@ -391,9 +391,12 @@ def ccdg_launcher(infile):
             while True:
                 tu_sample = input('Sample name: (enter to continue)\n' ).strip()
                 if tu_sample:
+                    if tu_sample[0] == '0':
+                        tu_sample = tu_sample[1:]
                     topup_samples.append(tu_sample)
                 else:
                     break
+        print(topup_samples)
 
         #create sample email
         while True:
