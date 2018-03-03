@@ -396,7 +396,6 @@ def ccdg_launcher(infile):
                     topup_samples.append(tu_sample)
                 else:
                     break
-        print(topup_samples)
 
         #create sample email
         while True:
