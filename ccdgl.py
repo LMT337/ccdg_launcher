@@ -113,7 +113,7 @@ def sample_pse_match(infile, sample, woid):
         infile_reader = csv.DictReader(infiletsv, delimiter='\t')
         for qc_data in infile_reader:
             if sample in qc_data['Sample Full Name']:
-                print('Sample: {} found to qc'.format(sample))
+                # print('Sample: {} found to qc'.format(sample))
                 if sample == qc_data['Sample Full Name']:
                     qc_results['QC Sample'] = qc_data['Sample Full Name']
                     qc_results['PSE'] = qc_data['PSE']
@@ -269,7 +269,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
                 if line['Top Up'] == 'YES':
                     print('Skipping topup sample: {}'.format(line['Full Name']))
                 elif line['Full Name'] in sample_list:
-                    print('Ignoring previously analyzed sample: {}\t{}\t{}'
+                    print('Ignoring previously launched sample: {}\t{}\t{}'
                           .format(line['Full Name'], line['Launch Date'], line['Launch Status']))
 
                 #write all other unchecked samples to file
@@ -391,6 +391,8 @@ def ccdg_launcher(infile):
             while True:
                 tu_sample = input('Sample name: (enter to continue)\n' ).strip()
                 if tu_sample:
+                    if tu_sample[0] == '0':
+                        tu_sample = tu_sample[1:]
                     topup_samples.append(tu_sample)
                 else:
                     break
@@ -451,6 +453,8 @@ def ccdg_launcher(infile):
                 sample_name = sample_remove_whitespace['Library']
                 sample_name_split = sample_name.split('-lib')[0]
                 sample = sample_name_split.strip()
+                if sample[0] == '0':
+                    sample = sample[1:]
                 sample_list.append(sample)
 
         #create compute workflow file
