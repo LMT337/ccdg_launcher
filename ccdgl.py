@@ -1,11 +1,12 @@
 import argparse, csv, os, webbrowser, datetime, glob
+from classes.woid import Woid
 
 #generate date month/day/year string
 mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
 
 #set working dir to ccdg woid dir when deployed
-working_dir = os.getcwd()
-# working_dir  = '/gscmnt/gc2783/qc/CCDG-build38/CCDG-FINRISK/Dev'
+# working_dir = os.getcwd()
+working_dir  = '/gscmnt/gc2783/qc/CCDG-build38/CCDG-FINRISK/Dev'
 
 qc_fieldnames = ['WOID','QC Sample','PSE','# of Inputs','# of Instrument Data','LIMS Status','Instrument Check',
                  'Launch Status','Launch Date','QC Status','QC Date','QC Failed Metrics','COD Collaborator',
@@ -314,9 +315,9 @@ def topup_csv_update(topup_samples, woid):
 #write emails to email file
 def ccdg_launcher(infile):
 
-    sample_list = []
-
     while True:
+        sample_list = []
+
         woid = input('----------\nWork order id (enter to exit):\n').strip()
         # if not woid:
         if (len(woid) == 0):
@@ -328,9 +329,16 @@ def ccdg_launcher(infile):
             print("\nwoid must be a number.")
             continue
 
-        master_outfile = woid + '.master.samples.tsv'
-        qc_status_file = woid + '.qcstatus.tsv'
-        launch_failed_file = woid + '.launch.fail.tsv'
+        woid_instance = Woid(woid)
+
+        master_outfile = woid_instance.master
+        print(master_outfile)
+        qc_status_file = woid_instance.statusfile
+        print(qc_status_file)
+        launch_failed_file = woid_instance.launchfail
+        print(launch_failed_file)
+        quit()
+
 
         #create woid dir if it does not exist
         if not os.path.exists(woid):
