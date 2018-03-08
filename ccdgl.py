@@ -314,9 +314,11 @@ def topup_csv_update(topup_samples, woid):
 #write emails to email file
 def ccdg_launcher(infile):
 
-    sample_list = []
 
     while True:
+
+        sample_list = []
+
         woid = input('----------\nWork order id (enter to exit):\n').strip()
         # if not woid:
         if (len(woid) == 0):
