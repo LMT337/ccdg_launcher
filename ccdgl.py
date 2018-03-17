@@ -395,7 +395,10 @@ def ccdg_launcher(infile):
                 if tu_sample:
                     if tu_sample[0] == '0':
                         tu_sample = tu_sample[1:]
-                    topup_samples.append(tu_sample)
+                    if tu_sample in open(woid+'/'+qc_status_file).read():
+                        topup_samples.append(tu_sample)
+                    if tu_sample not in open(woid+'/'+qc_status_file).read():
+                        print('{} not found in {} file.'.format(tu_sample,qc_status_file))
                 else:
                     break
 
