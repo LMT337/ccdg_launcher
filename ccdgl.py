@@ -429,12 +429,25 @@ def ccdg_launcher(infile):
             print('{} exists, please create file manually\n(sample #)samples.(email date)'.format(sample_outfile))
             continue
 
-        print('\nProduction samples (from email):')
-        sample_info = []
         while True:
-            sample_line = input()
-            if sample_line:
-                sample_info.append(sample_line)
+            print('\nProduction samples (from email):')
+            sample_info = []
+            while True:
+                sample_line = input()
+                if sample_line:
+                    sample_info.append(sample_line)
+                else:
+                    break
+
+            if len(sample_info) <= 1:
+                print('Please include production samples (from email) or header line.')
+                sample_info = []
+                continue
+
+            if 'Library' not in sample_info[0]:
+                print('Library field not found in header line.')
+                sample_info = []
+                continue
             else:
                 break
 
