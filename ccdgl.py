@@ -18,11 +18,14 @@ def main():
 
     parser = argparse.ArgumentParser(description=desc_str)
 
-    group = parser.add_mutually_exclusive_group()
+    group_a = parser.add_mutually_exclusive_group()
 
-    group.add_argument("-f", type=str, help='Input compute workflow file with all samples')
-    group.add_argument('-l', help='Link to links compute workflow file', action='store_true')
-    #TODO add group for woid only processing
+    group_a.add_argument("-f", type=str, help='Input compute workflow file with all samples')
+    group_a.add_argument('-l', help='Link to links compute workflow file', action='store_true')
+
+    group_b = parser.add_mutually_exclusive_group()
+    group_b.add_argument("-w", type=str, help='check failed samples, enter woids as comma separated list or all for '
+                                              'everything')
 
     args = parser.parse_args()
 
@@ -30,12 +33,91 @@ def main():
         generate_compute_workflow()
         quit()
 
-    if not os.path.exists(args.f):
-        print('{} file not found.'.format(args.f))
+    if args.w and args.f:
+        fail_files_check(args.w,args.f)
 
-    if os.path.exists(args.f):
+    if args.f:
+        if not os.path.exists(args.f):
+            print('{} file not found.'.format(args.f))
+
+        if os.path.exists(args.f):
+            woid_dirs = woid_list()
+            ccdg_launcher(working_dir + '/' + args.f)
+
+
+def fail_files_check(args_in, infile):
+
+    woid_dirs = []
+    outfile = 'ccdgl.fail.recheck.' + mm_dd_yy + '.tsv'
+    if args_in == 'all':
         woid_dirs = woid_list()
-        ccdg_launcher(working_dir + '/' + args.f)
+    else:
+        woid_dirs = args_in.split(',')
+
+    with open(outfile, 'w') as outfilecsv:
+        outfile_writer = csv.writer(outfilecsv, delimiter='\n')
+
+        for woid in woid_dirs:
+
+            print('-------------------------------------------')
+            outfile_writer.writerow(['-------------------------------------------'])
+            print('-------\n{}\n-------'.format(woid))
+            outfile_writer.writerow(['-------'])
+            outfile_writer.writerow([woid])
+            outfile_writer.writerow(['-------'])
+
+            sample_list = []
+
+            if not os.path.exists(woid):
+                print('\n{} dir does not exist.\nExiting ccdgl.'.format(woid))
+                exit()
+
+            qc_status_file = woid + '.qcstatus.tsv'
+            launch_failed_file = woid + '.launch.fail.tsv'
+            instrument_pass_status_active_file = woid + '.instrument.pass.status.active.tsv'
+
+            os.chdir(woid)
+
+            with open(launch_failed_file, 'r') as lfcsv, open(instrument_pass_status_active_file, 'r') as ipsafcsv:
+                lfcsv_reader =csv.DictReader(lfcsv, delimiter='\t')
+                ipsafcsv_reader = csv.DictReader(ipsafcsv, delimiter='\t')
+
+                for line in lfcsv_reader:
+                    if line['QC Sample'][0] == '0':
+                        line['QC Sample'] = line['QC Sample'][1:]
+                    sample_list.append(line['QC Sample'])
+
+                for line in ipsafcsv_reader:
+                    if line['QC Sample'][0] == '0':
+                        line['QC Sample'] = line['QC Sample'][1:]
+                    sample_list.append(line['QC Sample'])
+
+            # create compute workflow file
+            woid_cw_file = compute_workflow_create(working_dir +'/'+infile, woid)
+
+            # check to see if samples exist in compute workflow file
+            samples_not_found_in_cw = []
+            for sample in sample_list:
+                samples_not_found_in_cw = cw_sample_check(woid_cw_file, sample)
+
+            if len(samples_not_found_in_cw) > 0:
+                print('There are launch samples not found in {}:\n'.format(woid_cw_file))
+                for sample in samples_not_found_in_cw:
+                    print(sample)
+                quit()
+
+            # run qc status updates on samples
+            if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(
+                    launch_failed_file):
+                output = qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
+
+                for line in output:
+                    outfile_writer.writerow([line])
+            outfile_writer.writerow('')
+            os.chdir(working_dir)
+    quit()
+    return
+
 
 #print link to download compute workflow from lims and cat command
 def generate_compute_workflow():
@@ -52,10 +134,14 @@ def generate_compute_workflow():
     print('\nCompute workflow link:\n{}'.format(launch_link))
     print('\nCreate workflow file:\ncat > ccdg.computeworkflow.{}.tsv\n'.format(mm_dd_yy))
 
+
 #make list of all woid dirs, filter out anything that isn't a woid
 def woid_list():
+
     woid_dirs = []
+
     def is_int(string):
+
         try:
             int(string)
         except ValueError:
@@ -69,6 +155,7 @@ def woid_list():
         woid_dirs.append(woid)
 
     return woid_dirs
+
 
 #create computeworkflow file in woid directory
 def compute_workflow_create(compute_workflow_all_file, woid):
@@ -89,6 +176,7 @@ def compute_workflow_create(compute_workflow_all_file, woid):
                 outfile_writer.writerow(line)
     return outfile
 
+
 #Check compute workflow file to see if all samples are there
 sample_not_found = []
 def cw_sample_check(infile, sample):
@@ -103,6 +191,7 @@ def cw_sample_check(infile, sample):
     if sample not in cw_samples:
         sample_not_found.append(sample)
     return sample_not_found
+
 
 #assing qc fields, check instrument match and sample lims status
 def sample_pse_match(infile, sample, woid):
@@ -144,41 +233,63 @@ def sample_pse_match(infile, sample, woid):
 
     return qc_results
 
+
 #print sample status results
 def output_launcher_results(pse_ready, pse_fail, pse_fail_ready, pse_fail_fail, ins_pass_stat_actv):
 
+    output = []
     if len(pse_ready) > 0:
         print('\n{} Samples pass instrument check, status updated to Launched:'.format(str(len(pse_ready))))
+        output.append(str(len(pse_ready)) + ' Samples pass instrument check, status updated to Launched:')
         print('Sample', 'PSE', sep='\t')
+        output.append('Sample\tPSE')
         for pse in pse_ready:
             print(pse)
+            output.append(pse)
 
     if len(pse_fail) > 0:
         print('\n{} Samples failed instrument check, status is do not launch: '.format(str(len(pse_fail))))
+        output.append(str(len(pse_fail)) + 'Samples failed instrument check, status is do not launch:')
         print('Sample', 'PSE', '# of Inputs', '# of Instrument Data', sep="\t")
+        output.append('Sample\tPSE\t# of Inputs\t# of Instrument Data')
         for pse in pse_fail:
             print(pse)
+            output.append(pse)
 
     if len(pse_fail_ready) > 0:
         print('\n{} Failed samples, pass instrument check, status updated to Launched:'.format(str(len(pse_fail_ready))))
+        output.append(str(len(pse_fail_ready)) + ' Failed samples, pass instrument check, status updated to Launched:')
         print('Sample', 'PSE', sep='\t')
+        output.append('Sample\tPSE')
         for pse in pse_fail_ready:
             print(pse)
+            output.append(pse)
 
     if len(pse_fail_fail) > 0:
         print('\n{} Samples failed instrument check again, status is do not launch:'.format(str(len(pse_fail_fail))))
+        output.append(str(len(pse_fail_fail)) + ' Samples failed instrument check again, status is do not launch:')
         for pse in pse_fail_fail:
             print(pse)
+            output.append(pse)
 
     if len(ins_pass_stat_actv) > 0:
         print('\n{} Samples pass instrument check, protocol status is active:'.format(str(len(ins_pass_stat_actv))))
+        output.append(str(len(ins_pass_stat_actv)) + ' Samples pass instrument check, protocol status is active:')
         print('Sample', 'PSE', '# of Inputs', '# of Instrument Data', 'LIMS Status', sep="\t")
+        output.append('Sample\tPSE\t# of Inputs\t# of Instrument Data\tLIMS Status')
         for pse in ins_pass_stat_actv:
             print(pse)
+            output.append(pse)
+
         print('Manually launch samples if they have not already been launched (check jira).')
+        output.append('Manually launch samples if they have not already been launched (check jira).')
 
     else:
         print('\nAll processed samples have a launch status.\n')
+        output.append('All processed samples have a launch status.')
+
+    return output
+
 
 #process samples update qc files and populate results lists for printing
 qc_master_sample_list = []
@@ -284,9 +395,10 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
     os.rename(launch_failed_temp, launch_failed_file)
     os.rename(instrument_pass_status_active_file_tmp, instrument_pass_status_active_file)
 
-    output_launcher_results(pse_ready, pse_fail, pse_fail_ready, pse_fail_fail, ins_pass_stat_actv)
+    output = output_launcher_results(pse_ready, pse_fail, pse_fail_ready, pse_fail_fail, ins_pass_stat_actv)
 
-    return
+    return output
+
 
 #Determine sample topup status
 def topup_csv_update(topup_samples, woid):
@@ -310,10 +422,10 @@ def topup_csv_update(topup_samples, woid):
 
     return
 
+
 #sample email function, create new woid dir if it doesn't exist and master spreadsheet if it doesn't exist.
 #write emails to email file
 def ccdg_launcher(infile):
-
 
     while True:
 
@@ -424,9 +536,8 @@ def ccdg_launcher(infile):
                 exit()
             sample_outfile = sample_number + 'samples.' + new_date
 
-
         if os.path.exists(woid + '/' + sample_outfile):
-            print('{} exists, please create file manually\n(sample #)samples.(email date)'.format(sample_outfile))
+            print('{} file already exists.'.format(sample_outfile))
             continue
 
         while True:
@@ -496,6 +607,7 @@ def ccdg_launcher(infile):
         os.chdir(working_dir)
 
     return
+
 
 if __name__ == '__main__':
     main()
