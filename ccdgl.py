@@ -86,47 +86,50 @@ def fail_files_check(args_in, in_file):
 
             os.chdir(woid)
 
-            with open(launch_failed_file, 'r') as lfcsv, open(instrument_pass_status_active_file, 'r') as ipsafcsv:
-                lfcsv_reader =csv.DictReader(lfcsv, delimiter='\t')
-                ipsafcsv_reader = csv.DictReader(ipsafcsv, delimiter='\t')
+            if os.path.exists(launch_failed_file) and os.path.exists(instrument_pass_status_active_file) and \
+                    os.path.exists(qc_status_file):
 
-                for line in lfcsv_reader:
-                    if line['QC Sample'][0] == '0':
-                        line['QC Sample'] = line['QC Sample'][1:]
-                    sample_list.append(line['QC Sample'])
+                with open(launch_failed_file, 'r') as lfcsv, open(instrument_pass_status_active_file, 'r') as ipsafcsv:
+                    lfcsv_reader =csv.DictReader(lfcsv, delimiter='\t')
+                    ipsafcsv_reader = csv.DictReader(ipsafcsv, delimiter='\t')
 
-                for line in ipsafcsv_reader:
-                    if line['QC Sample'][0] == '0':
-                        line['QC Sample'] = line['QC Sample'][1:]
-                    sample_list.append(line['QC Sample'])
+                    for line in lfcsv_reader:
+                        if line['QC Sample'][0] == '0':
+                            line['QC Sample'] = line['QC Sample'][1:]
+                        sample_list.append(line['QC Sample'])
 
-            # create compute workflow file
-            woid_cw_file = compute_workflow_create(infile, woid)
+                    for line in ipsafcsv_reader:
+                        if line['QC Sample'][0] == '0':
+                            line['QC Sample'] = line['QC Sample'][1:]
+                        sample_list.append(line['QC Sample'])
 
-            # check to see if samples exist in compute workflow file
-            samples_not_found_in_cw = []
-            for sample in sample_list:
-                samples_not_found_in_cw = cw_sample_check(woid_cw_file, sample)
+                # create compute workflow file
+                woid_cw_file = compute_workflow_create(infile, woid)
 
-            if len(samples_not_found_in_cw) > 0:
-                print('There are launch samples not found in {}:\n'.format(woid_cw_file))
-                for sample in samples_not_found_in_cw:
-                    print(sample)
-                quit()
+                # check to see if samples exist in compute workflow file
+                samples_not_found_in_cw = []
+                for sample in sample_list:
+                    samples_not_found_in_cw = cw_sample_check(woid_cw_file, sample)
 
-            # run qc status updates on samples
-            if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(
-                    launch_failed_file):
-                output = qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
+                if len(samples_not_found_in_cw) > 0:
+                    print('There are launch samples not found in {}:\n'.format(woid_cw_file))
+                    for sample in samples_not_found_in_cw:
+                        print(sample)
+                    quit()
 
-                for line in output:
-                    outfile_writer.writerow([line])
-            outfile_writer.writerow('')
+                # run qc status updates on samples
+                if os.path.exists(qc_status_file) and os.path.exists(woid_cw_file) and os.path.exists(
+                        launch_failed_file):
+                    output = qc_status_update(woid_cw_file, sample_list, woid, qc_status_file)
 
-            subprocess.run(["/gscuser/awagner/bin/python3", "/gscuser/awollam/aw/ccdg_zero_restore.py",
-                            "-w", woid])
+                    for line in output:
+                        outfile_writer.writerow([line])
+                outfile_writer.writerow('')
 
-            os.chdir(working_dir)
+                subprocess.run(["/gscuser/awagner/bin/python3", "/gscuser/awollam/aw/ccdg_zero_restore.py",
+                                "-w", woid])
+
+                os.chdir(working_dir)
     quit()
     return
 
