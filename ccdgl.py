@@ -360,7 +360,7 @@ def qc_status_update(compute_workflow, sample_list, woid, qc_status_file):
             qc_master_sample_list.append(line['Full Name'])
 
             # check samples that have already failed
-            if line['Instrument Check'] == 'FAIL' or line['Launch Status'] == 'MANUAL LAUNCH' \
+            if (line['Instrument Check'] == 'FAIL' or line['Launch Status'] == 'MANUAL LAUNCH') \
                     and line['Top Up'] == 'NO':
                 fail_metrics = sample_pse_match(compute_workflow, line['Full Name'], woid)
                 fail_qc_update = dict(list(line.items())+list(fail_metrics.items()))
