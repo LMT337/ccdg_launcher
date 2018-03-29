@@ -23,6 +23,7 @@ def main():
 
     group_a.add_argument("-f", type=str, help='Input compute workflow file with all samples')
     group_a.add_argument('-l', help='Link to links compute workflow file', action='store_true')
+    group_a.add_argument('-t', help='Update status file with topup samples', action='store_true')
 
     group_b = parser.add_mutually_exclusive_group()
     group_b.add_argument("-w", type=str, help='check failed samples, enter woids as comma separated list or all for '
@@ -33,6 +34,11 @@ def main():
     if args.l:
         generate_compute_workflow()
         quit()
+
+    if args.t:
+
+        woid_dirs = woid_list()
+        ccdg_launcher('args.t')
 
     if args.w and args.f:
         if not os.path.exists(args.f):
@@ -535,19 +541,32 @@ def ccdg_launcher(infile):
         # check for topup samples
         topup_samples = []
         tu_sample_y_n = input('\nTopup samples? (y or n)\n')
-        if tu_sample_y_n == 'y':
-            while True:
-                tu_sample = input('Sample name: (enter to continue)\n' ).strip()
-                if tu_sample:
-                    if tu_sample[0] == '0':
-                        tu_sample = tu_sample[1:]
-                    if tu_sample in open(woid+'/'+qc_status_file).read():
-                        topup_samples.append(tu_sample)
-                    if tu_sample not in open(woid+'/'+qc_status_file).read():
-                        print('{} not found in {} file.'.format(tu_sample,qc_status_file))
-                else:
-                    break
-
+        while True:
+            if tu_sample_y_n == 'n':
+                break
+            if tu_sample_y_n not in ['y', 'n']:
+                tu_sample_y_n = input('\nTopup samples? (y or n)\n')
+                continue
+            if tu_sample_y_n == 'y':
+                while True:
+                    tu_sample = input('Sample name: (enter to continue)\n' ).strip()
+                    if tu_sample:
+                        if tu_sample[0] == '0':
+                            tu_sample = tu_sample[1:]
+                        if tu_sample in open(woid+'/'+qc_status_file).read():
+                            topup_samples.append(tu_sample)
+                        if tu_sample not in open(woid+'/'+qc_status_file).read():
+                            print('{} not found in {} file.'.format(tu_sample,qc_status_file))
+                    else:
+                        break
+                if infile == 'args.t':
+                    os.chdir(woid)
+                    topup_csv_update(topup_samples, woid)
+                    print('Samples updated to topup in {}.qcstatus.tsf'.format(woid))
+                    for sample in topup_samples:
+                        print(sample)
+                    quit()
+                break
         # create sample email
         while True:
             sample_number = input('\nSample number:\n')
@@ -585,7 +604,7 @@ def ccdg_launcher(infile):
                     break
 
             if len(sample_info) <= 1:
-                print('Please include production samples (from email) or header line.')
+                print('Please include production samples (from email) or add header line.')
                 sample_info = []
                 continue
 
