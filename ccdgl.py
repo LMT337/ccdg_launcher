@@ -456,7 +456,7 @@ def topup_csv_update(topup_samples, woid):
                 line['Top Up'] = 'NO'
             temp_status_writer.writerow(line)
 
-    os.rename(woid + '.qcstatus.temp.tsv',woid + '.qcstatus.tsv')
+    os.rename(woid + '.qcstatus.temp.tsv', woid + '.qcstatus.tsv')
 
     return
 
@@ -562,7 +562,7 @@ def ccdg_launcher(infile):
                 if infile == 'args.t':
                     os.chdir(woid)
                     topup_csv_update(topup_samples, woid)
-                    print('Samples updated to topup in {}.qcstatus.tsf'.format(woid))
+                    print('Samples have been updated as topup in {}.qcstatus.tsv'.format(woid))
                     for sample in topup_samples:
                         print(sample)
                     quit()
