@@ -499,6 +499,8 @@ def ccdg_launcher(infile):
                         else:
                             break
 
+                    master_samples[:] = [x for x in master_samples if 'WOI' not in x]
+
                     with open(master_outfile, 'w') as mastercsv, open(qc_status_file, 'w') as statuscsv:
                         master_write = csv.writer(mastercsv, delimiter='\n')
                         status_write = csv.writer(statuscsv, delimiter='\n')
