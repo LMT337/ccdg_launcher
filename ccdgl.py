@@ -481,10 +481,10 @@ def sample_add():
 
         os.chdir(woid)
 
-        print('\nCreate {}.updated.master.samples.tsv file:\n'.format(woid))
+        print('\nCreate {}.updated.master.samples.tsv file:'.format(woid))
         master_sample_link = 'https://imp-lims.gsc.wustl.edu/entity/setup-work-order/' + woid + \
                              '?perspective=Sample&setup_name=' + woid
-        print('\nMaster sample link:\n{}\nInput samples:'.format(master_sample_link))
+        print('Master sample link:\n{}\nInput samples:'.format(master_sample_link))
 
         master_samples = []
         while True:
@@ -494,6 +494,9 @@ def sample_add():
             else:
                 break
 
+        if len(master_samples) == 0:
+            print('No samples inputed.')
+            continue
         master_samples[:] = [x for x in master_samples if 'WOI' not in x]
 
         updated_sample_dict = {}
@@ -517,18 +520,20 @@ def sample_add():
 
         print('Updated master file has {} samples, {} has {} samples.'.format(len(updated_sample_list), qc_status_file,
                                                                               len(status_samples)))
+
+        if bool(set(status_samples).intersection(updated_sample_list)):
+            print('{} samples match inputed master samples.'.format(qc_status_file))
+        else:
+            print('{} file samples do not match inputed master file samples. Please check sample input file.'
+                  .format(qc_status_file))
+            os.chdir(working_dir)
+            continue
+
         if len(updated_sample_list) < len(status_samples):
-            print('Updated master samples not found in {} file:'.format(qc_status_file))
+            print('Samples in {} file, not in updated master:'.format(qc_status_file))
             sample_diff = list(set(status_samples) - set(updated_sample_list))
             for samp in sample_diff:
                 print(samp)
-
-        if bool(set(status_samples).intersection(updated_sample_list)):
-            print('{} file samples match updated master file sample list.'.format(qc_status_file))
-        else:
-            print('{} file samples do not match. Please check sample input file'.format(qc_status_file))
-            os.chdir(working_dir)
-            continue
 
         sample_add_flag = True
         for sample in updated_sample_dict:
