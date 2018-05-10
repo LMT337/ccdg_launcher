@@ -5,7 +5,7 @@ mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
 
 # set working dir to ccdg woid dir when deployed
 # working_dir = os.getcwd()
-working_dir = '/gscmnt/gc2783/qc/CCDGWGS2018/'
+working_dir = '/gscmnt/gc2783/qc/CCDGWGS2018'
 
 qc_fieldnames = ['WOID','QC Sample','PSE','# of Inputs','# of Instrument Data','LIMS Status','Instrument Check',
                  'Launch Status','Launch Date','QC Status','QC Date','QC Failed Metrics','COD Collaborator',
@@ -24,11 +24,11 @@ def main():
     group_a.add_argument("-f", type=str, help='Input compute workflow file with all samples')
     group_a.add_argument('-l', help='Link to links compute workflow file', action='store_true')
     group_a.add_argument('-t', help='Update status file with topup samples', action='store_true')
+    group_a.add_argument('-a', help='add additional samples to status file', action='store_true')
 
     group_b = parser.add_mutually_exclusive_group()
     group_b.add_argument("-w", type=str, help='check failed samples, enter woids as comma separated list or all for '
                                               'everything')
-
     args = parser.parse_args()
 
     if args.l:
@@ -36,9 +36,11 @@ def main():
         quit()
 
     if args.t:
-
         woid_dirs = woid_list()
         ccdg_launcher('args.t')
+
+    if args.a:
+        sample_add()
 
     if args.w and args.f:
         if not os.path.exists(args.f):
@@ -151,7 +153,6 @@ def generate_compute_workflow():
     while open_url not in ('y', 'n'):
         open_url = input('Please enter y or n:\n')
     if open_url == 'y':
-        print('here!!')
         webbrowser.get(firefox_path).open(launch_link)
 
     print('\nCompute workflow link:\n{}'.format(launch_link))
@@ -173,10 +174,8 @@ def woid_list():
             return True
 
     woid_dir_unfiltered = glob.glob('285*')
-
     for woid in filter(is_int, woid_dir_unfiltered):
         woid_dirs.append(woid)
-
     return woid_dirs
 
 
@@ -206,7 +205,6 @@ sample_not_found = []
 def cw_sample_check(infile, sample):
 
     cw_samples = []
-
     with open(infile) as infiletsv:
         infile_reader = csv.DictReader(infiletsv, delimiter='\t')
         for qc_data in infile_reader:
@@ -221,7 +219,6 @@ def cw_sample_check(infile, sample):
 def sample_pse_match(infile, sample, woid):
 
     qc_results = {}
-
     if str(sample[0]) == '0':
         sample = sample[1:]
 
@@ -461,6 +458,109 @@ def topup_csv_update(topup_samples, woid):
     return
 
 
+# add samples to qcstatus file after they have been reactivated
+def sample_add():
+
+    while True:
+        woid = input('----------\nWork order id (enter to exit):\n').strip()
+        if len(woid) == 0:
+            print('Exiting ccdg launcher.')
+            break
+        try:
+            val = int(woid)
+        except ValueError:
+            print("\nwoid must be a number.")
+            continue
+
+        updated_master_outfile = woid + '.updated.master.samples.tsv'
+        qc_status_file = woid + '.qcstatus.tsv'
+
+        if not os.path.exists(woid):
+            print('\n{} dir does not exist.'.format(woid))
+            continue
+
+        os.chdir(woid)
+
+        print('\nCreate {}.updated.master.samples.tsv file:\n'.format(woid))
+        master_sample_link = 'https://imp-lims.gsc.wustl.edu/entity/setup-work-order/' + woid + \
+                             '?perspective=Sample&setup_name=' + woid
+        print('\nMaster sample link:\n{}\nInput samples:'.format(master_sample_link))
+
+        master_samples = []
+        while True:
+            master_sample_line = input()
+            if master_sample_line:
+                master_samples.append(master_sample_line)
+            else:
+                break
+
+        master_samples[:] = [x for x in master_samples if 'WOI' not in x]
+
+        updated_sample_dict = {}
+        updated_sample_list = []
+        for line in master_samples:
+            if 'Content' in line:
+                pass
+            else:
+                sample = line.split('\t')[1]
+                updated_sample_dict[sample] = line
+                updated_sample_list.append(sample)
+
+        status_samples = []
+        with open(updated_master_outfile, 'w') as mastercsv, open(qc_status_file, 'r') as statuscsv:
+            updated_master_write = csv.writer(mastercsv, delimiter='\n')
+            updated_master_write.writerows([master_samples])
+
+            status_reader = csv.DictReader(statuscsv, delimiter='\t')
+            for line in status_reader:
+                status_samples.append(line['DNA'])
+
+        print('Updated master file has {} samples, {} has {} samples.'.format(len(updated_sample_list), qc_status_file,
+                                                                              len(status_samples)))
+        if len(updated_sample_list) < len(status_samples):
+            print('Updated master samples not found in {} file:'.format(qc_status_file))
+            sample_diff = list(set(status_samples) - set(updated_sample_list))
+            for samp in sample_diff:
+                print(samp)
+
+        if bool(set(status_samples).intersection(updated_sample_list)):
+            print('{} file samples match updated master file sample list.'.format(qc_status_file))
+        else:
+            print('{} file samples do not match. Please check sample input file'.format(qc_status_file))
+            os.chdir(working_dir)
+            continue
+
+        sample_add_flag = True
+        for sample in updated_sample_dict:
+            if sample not in status_samples:
+                print('Adding {} to {} in {}.'.format(sample, qc_status_file, woid))
+                os.rename(qc_status_file, '{}.status.temp.tsv'.format(woid))
+                with open(qc_status_file, 'w') as statuscsv, open(updated_master_outfile, 'r') as mastercsv, \
+                        open('{}.status.temp.tsv'.format(woid), 'r') as tempcsv:
+                    updated_master_reader = csv.DictReader(mastercsv, delimiter='\t')
+                    tmp_csv_reader = csv.DictReader(tempcsv, delimiter='\t')
+                    header = tmp_csv_reader.fieldnames
+
+                    status_writer = csv.DictWriter(statuscsv, fieldnames=header, delimiter='\t')
+                    status_writer.writeheader()
+
+                    for line in tmp_csv_reader:
+                        status_writer.writerow(line)
+
+                    for line in updated_master_reader:
+                        if sample in line['DNA']:
+                            status_writer.writerow(line)
+
+                    sample_add_flag = False
+
+                os.remove('{}.status.temp.tsv'.format(woid))
+
+        if sample_add_flag:
+            print('No samples found to add.')
+
+        os.chdir(working_dir)
+
+
 # sample email function, create new woid dir if it doesn't exist and master spreadsheet if it doesn't exist.
 # write emails to email file
 def ccdg_launcher(infile):
@@ -470,8 +570,7 @@ def ccdg_launcher(infile):
         sample_list = []
 
         woid = input('----------\nWork order id (enter to exit):\n').strip()
-        # if not woid:
-        if (len(woid) == 0):
+        if len(woid) == 0:
             print('Exiting ccdg launcher.')
             break
         try:
