@@ -75,12 +75,6 @@ def fail_files_check(args_in, in_file):
 
         for woid in woid_dirs:
             os.chdir(working_dir)
-            print('-------------------------------------------')
-            outfile_writer.writerow(['-------------------------------------------'])
-            print('-------\n{}\n-------'.format(woid))
-            outfile_writer.writerow(['-------'])
-            outfile_writer.writerow([woid])
-            outfile_writer.writerow(['-------'])
 
             sample_list = []
 
@@ -96,6 +90,13 @@ def fail_files_check(args_in, in_file):
 
             if os.path.exists(launch_failed_file) and os.path.exists(instrument_pass_status_active_file) and \
                     os.path.exists(qc_status_file):
+
+                print('-------------------------------------------')
+                outfile_writer.writerow(['-------------------------------------------'])
+                print('-------\n{}\n-------'.format(woid))
+                outfile_writer.writerow(['-------'])
+                outfile_writer.writerow([woid])
+                outfile_writer.writerow(['-------'])
 
                 with open(launch_failed_file, 'r') as lfcsv, open(instrument_pass_status_active_file, 'r') as ipsafcsv:
                     lfcsv_reader =csv.DictReader(lfcsv, delimiter='\t')
